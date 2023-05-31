@@ -8,6 +8,9 @@ library(cowplot) # Grid plots
 library(ggmap) # Google maps
 library(rgdal)
 library(dplyr)
+library(plotly)
+library(shiny)
+library(leaflet)
 
 getwd()
 theme_set(theme_bw()) # Theme appropriate for maps
@@ -16,8 +19,8 @@ powiaty <- st_as_sf(readOGR(dsn=file.path(getwd(),"powiaty")))
 entire_data <- read.csv("dataset.csv")
 
 powiaty <- transform(powiaty, powiat_name = sapply(strsplit(x=powiaty$JPT_NAZWA_, split = ' '), function(x) paste(x[-1], collapse = ' ')))  
-##my god why string concatenation is so hard in R xD
-data_powiaty_agg <- entire_data %>% group_by(Powiat) %>% summarise(pis=sum(Prawo.i.SprawiedliwoÅ›Ä‡),
+
+data_powiaty_agg <- entire_data %>% group_by(Powiat) %>% summarise(pis=sum(Prawo.i.Sprawiedliwoœæ),
                                        po = sum(Koalicja.Europejska),
                                        .groups='drop') %>%  as.data.frame()
 
@@ -25,37 +28,61 @@ powiaty_agg <- merge(x=data_powiaty_agg, y=powiaty[c('powiat_name', 'geometry')]
 powiaty_agg <- transform(powiaty_agg, zwyciezca =  ifelse(pis > po, TRUE, FALSE)) #binary fill 
 
 
-ggplot(data = powiaty_agg, aes(geometry = geometry)) + 
-  geom_sf(aes(fill = zwyciezca)) +
-  scale_fill_discrete(name='ZwyciÄ™zca w okrÄ™gu',
-                      labels=c('Koalicja Europejska', 'Prawo i SprawiedliwoÅ›Ä‡')) +
+
+mapa_interaktywna <- ggplot(data = powiaty_agg, aes(geometry = geometry)) + 
+  geom_sf()+
+  geom_sf(data = powiaty_agg, aes(fill = zwyciezca)) +
+  scale_fill_discrete(name='Zwyciêzca w okrêgu',
+                    labels=c('Koalicja Europejska', 'Prawo i Sprawiedliwoœæ')) +
+  geom_sf(data = wojewodztwa, fill = NA, color = "black", linetype = "solid", size = 10.0) +
   theme(axis.text.x = element_blank(),
-        axis.text.y = element_blank(),
-        axis.ticks.x = element_blank(),
-        axis.ticks.y = element_blank(),
-        axis.title.x = element_blank(),
-        axis.title.y = element_blank()
-  )
+      axis.text.y = element_blank(),
+      axis.ticks.x = element_blank(),
+      axis.ticks.y = element_blank(),
+      axis.title.x = element_blank(),
+      axis.title.y = element_blank()
+)
+
+powiaty_agg_sf <- st_as_sf(powiaty_agg)
+powiaty_agg_sf <- st_transform(powiaty_agg_sf, crs = st_crs("+proj=longlat +datum=WGS84"))
+
+mymap <- leaflet() %>%
+  setView(lng = 52.25, lat = 19.25, zoom = 2.0) %>%
+  addPolygons(data = powiaty_agg_sf, fillColor = ~ifelse(zwyciezca, "blue", "red"))
+
+powiaty_agg_sf$name <- powiaty_agg_sf$Powiat
+
+mymap <- mymap %>% addPolygons(data = powiaty_agg_sf, fillColor = ~ifelse(zwyciezca, "blue", "red"), popup = ~name)
+
+mymap
+
+
+mapa_interaktywna <- ggplotly(mapa_interaktywna) %>%
+  add_markers(data = powiaty_agg, x = ~geometry$x, y = ~geometry$y, hovertext = ~powiaty_agg$Powiat)
+
+mapa_1 <- ggplotly(mapa_interaktywna)
+
+mapa_interaktywna
 
 wojewodztwa <- st_as_sf(readOGR(dsn=file.path(getwd(),"wojewodztwa")))
 
-data_wojewodztwa_agg <- entire_data %>% group_by(WojewÃ³dztwo) %>%
-  summarise(oddane_glosy=sum(Liczba.kart.wyjÄ™tych.z.urny),
-            uprawnieni_do_glosowania=sum(Liczba.wyborcÃ³w.uprawnionych.do.gÅ‚osowania),
+data_wojewodztwa_agg <- entire_data %>% group_by(Województwo) %>%
+  summarise(oddane_glosy=sum(Liczba.kart.wyjêtych.z.urny),
+            uprawnieni_do_glosowania=sum(Liczba.wyborców.uprawnionych.do.g³osowania),
             .groups='drop') %>% as.data.frame()
 
 wojewodztwa <- cbind(wojewodztwa, st_coordinates(st_centroid(wojewodztwa$geometry)))
-wojewodztwa_agg <- merge(x=data_wojewodztwa_agg, y=wojewodztwa[c('JPT_NAZWA_', 'geometry','X','Y')], by.x="WojewÃ³dztwo", by.y="JPT_NAZWA_")
+wojewodztwa_agg <- merge(x=data_wojewodztwa_agg, y=wojewodztwa[c('JPT_NAZWA_', 'geometry','X','Y')], by.x="Województwo", by.y="JPT_NAZWA_")
 wojewodztwa_agg <- transform(wojewodztwa_agg, frekwencja=round(oddane_glosy/uprawnieni_do_glosowania, digits = 3)*100)
 
 ############napisy##############
 wojewodztwa_agg <- transform(wojewodztwa_agg, Y_woj=Y-20000)
 
 
-ggplot(data = wojewodztwa_agg, aes(geometry = geometry)) +
+frekwencja_ogolna <- ggplot(data = wojewodztwa_agg, aes(geometry = geometry)) +
   geom_sf(aes(fill = frekwencja)) +
   geom_text(aes(x=X, y=Y, label=paste(frekwencja, "%", sep='')), position = position_dodge(0.5), size=4.2) +
-  geom_text(aes(x=X, y=Y_woj, label=WojewÃ³dztwo), position= position_dodge(0.9), size=2.5) +
+  geom_text(aes(x=X, y=Y_woj, label=Województwo), position= position_dodge(0.9), size=2.5) +
   scale_fill_viridis_c(option = "D",trans = "sqrt", alpha = .4) +
   theme(axis.text.x = element_blank(),
         axis.text.y = element_blank(),
@@ -65,5 +92,55 @@ ggplot(data = wojewodztwa_agg, aes(geometry = geometry)) +
         axis.title.y = element_blank()
         )
   
-  
-  
+data_wojewodztwa_agg_village <- entire_data %>% filter(Typ.obszaru == 'wieœ') %>% group_by(Województwo) %>%
+  summarise(oddane_glosy=sum(Liczba.kart.wyjêtych.z.urny),
+            uprawnieni_do_glosowania=sum(Liczba.wyborców.uprawnionych.do.g³osowania),
+            .groups='drop') %>% as.data.frame()  
+
+data_wojewodztwa_agg_village
+data_wojewodztwa_agg
+
+wojewodztwa_agg_village <- merge(x=data_wojewodztwa_agg_village, y=wojewodztwa[c('JPT_NAZWA_', 'geometry','X','Y')], by.x="Województwo", by.y="JPT_NAZWA_")
+wojewodztwa_agg_village <- transform(wojewodztwa_agg_village, frekwencja=round(oddane_glosy/uprawnieni_do_glosowania, digits = 3)*100)
+
+wojewodztwa_agg_village <- transform(wojewodztwa_agg_village, Y_woj=Y-20000)
+
+frekwencja_wies <- ggplot(data = wojewodztwa_agg_village, aes(geometry = geometry)) +
+  geom_sf(aes(fill = frekwencja)) +
+  geom_text(aes(x=X, y=Y, label=paste(frekwencja, "%", sep='')), position = position_dodge(0.5), size=4.2) +
+  geom_text(aes(x=X, y=Y_woj, label=Województwo), position= position_dodge(0.9), size=2.5) +
+  scale_fill_viridis_c(option = "D",trans = "sqrt", alpha = .4) +
+  theme(axis.text.x = element_blank(),
+        axis.text.y = element_blank(),
+        axis.ticks.x = element_blank(),
+        axis.ticks.y = element_blank(),
+        axis.title.x = element_blank(),
+        axis.title.y = element_blank()
+  )
+
+data_wojewodztwa_agg_city <- entire_data %>% filter(Typ.obszaru == 'miasto') %>% group_by(Województwo) %>%
+  summarise(oddane_glosy=sum(Liczba.kart.wyjêtych.z.urny),
+            uprawnieni_do_glosowania=sum(Liczba.wyborców.uprawnionych.do.g³osowania),
+            .groups='drop') %>% as.data.frame()  
+
+data_wojewodztwa_agg_city
+data_wojewodztwa_agg
+
+wojewodztwa_agg_city <- merge(x=data_wojewodztwa_agg_city, y=wojewodztwa[c('JPT_NAZWA_', 'geometry','X','Y')], by.x="Województwo", by.y="JPT_NAZWA_")
+wojewodztwa_agg_city <- transform(wojewodztwa_agg_city, frekwencja=round(oddane_glosy/uprawnieni_do_glosowania, digits = 3)*100)
+
+wojewodztwa_agg_city <- transform(wojewodztwa_agg_city, Y_woj=Y-20000)
+
+frekwencja_miasto <- ggplot(data = wojewodztwa_agg_city, aes(geometry = geometry)) +
+  geom_sf(aes(fill = frekwencja)) +
+  geom_text(aes(x=X, y=Y, label=paste(frekwencja, "%", sep='')), position = position_dodge(0.5), size=4.2) +
+  geom_text(aes(x=X, y=Y_woj, label=Województwo), position= position_dodge(0.9), size=2.5) +
+  scale_fill_viridis_c(option = "D",trans = "sqrt", alpha = .4) +
+  theme(axis.text.x = element_blank(),
+        axis.text.y = element_blank(),
+        axis.ticks.x = element_blank(),
+        axis.ticks.y = element_blank(),
+        axis.title.x = element_blank(),
+        axis.title.y = element_blank()
+  )
+
