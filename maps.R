@@ -16,7 +16,7 @@ getwd()
 theme_set(theme_bw()) # Theme appropriate for maps
 
 powiaty <- st_as_sf(readOGR(dsn=file.path(getwd(),"powiaty")))
-entire_data <- read.csv("dataset.csv")
+entire_data <- read.csv("dataset.csv", encoding = "UTF-8")
 
 powiaty <- transform(powiaty, powiat_name = sapply(strsplit(x=powiaty$JPT_NAZWA_, split = ' '), function(x) paste(x[-1], collapse = ' ')))  
 
@@ -46,13 +46,29 @@ mapa_interaktywna <- ggplot(data = powiaty_agg, aes(geometry = geometry)) +
 powiaty_agg_sf <- st_as_sf(powiaty_agg)
 powiaty_agg_sf <- st_transform(powiaty_agg_sf, crs = st_crs("+proj=longlat +datum=WGS84"))
 
+wojewodztwa_agg_sf <- st_as_sf(wojewodztwa_agg)
+wojewodztwa_agg_sf <- st_transform(wojewodztwa_agg_sf, crs = st_crs("+proj=longlat +datum=WGS84"))
+
 mymap <- leaflet() %>%
   setView(lng = 52.25, lat = 19.25, zoom = 2.0) %>%
-  addPolygons(data = powiaty_agg_sf, fillColor = ~ifelse(zwyciezca, "blue", "red"))
+  addPolygons(data = powiaty_agg_sf, fillColor = ~ifelse(zwyciezca, "blue", "red"), color = 'black', weight = 2)
 
 powiaty_agg_sf$name <- powiaty_agg_sf$Powiat
 
-mymap <- mymap %>% addPolygons(data = powiaty_agg_sf, fillColor = ~ifelse(zwyciezca, "blue", "red"), popup = ~name)
+legend_colors <- c("blue", "red")  # Define colors for the legend
+legend_labels <- c("PiS", "KE")  # Define labels for the legend
+line_thickness = 5
+
+mymap <- mymap %>% addPolygons(data = wojewodztwa_agg_sf, 
+              color = "black", 
+              weight = line_thickness)  # Second layer with black lines
+
+mymap <- mymap %>% addPolygons(data = powiaty_agg_sf, 
+                               fillColor = ~ifelse(zwyciezca, "blue", "red"),
+                               color = 'black',
+                               weight = 2,
+                               popup = ~name) %>%
+                   addLegend("bottomright", colors = legend_colors, labels = legend_labels)
 
 mymap
 
