@@ -37,9 +37,27 @@ powiaty_shiny <- entire_data %>% group_by(Powiat) %>% summarise(pis=sum(Prawo.i.
                       merge(x=., y=powiaty[c('powiat_name', 'geometry')], by.x="Powiat", by.y="powiat_name", all.x=TRUE)
 
 
+wojewodztwa <- st_as_sf(readOGR(dsn=file.path(getwd(),"wojewodztwa")))
+wojewodztwa <- cbind(wojewodztwa, st_coordinates(st_centroid(wojewodztwa$geometry)))
+
+data_wojewodztwa_agg <- entire_data %>% group_by(Województwo) %>%
+  summarise(oddane_glosy=sum(Liczba.kart.wyjętych.z.urny),
+            uprawnieni_do_glosowania=sum(Liczba.wyborców.uprawnionych.do.głosowania),
+            .groups='drop') %>% as.data.frame()
+
+wojewodztwa_agg <- merge(x=data_wojewodztwa_agg, y=wojewodztwa[c('JPT_NAZWA_', 'geometry','X','Y')], by.x="Województwo", by.y="JPT_NAZWA_")
+wojewodztwa_agg <- transform(wojewodztwa_agg, frekwencja=round(oddane_glosy/uprawnieni_do_glosowania, digits = 3)*100)
+
+
+wojewodztwa_agg <- transform(wojewodztwa_agg, Y_woj=Y-20000)
+
+############do tego momentu trzeba załadować, żeby działały wykresy z maps_app.R
+
+
+
 mapa_partia <- ggplot(data = powiaty_shiny, aes(geometry = geometry, fill = po)) + 
   geom_sf() +
-  scale_colour_viridis_c(option = "D", alpha = .4) +
+  scale_fill_viridis_c(option = "G", alpha = .6, direction = -1) +
   theme(axis.text.x = element_blank(),
         axis.text.y = element_blank(),
         axis.ticks.x = element_blank(),
@@ -101,20 +119,6 @@ mapa_interaktywna <- ggplotly(mapa_interaktywna) %>%
 mapa_1 <- ggplotly(mapa_interaktywna)
 
 mapa_interaktywna
-
-wojewodztwa <- st_as_sf(readOGR(dsn=file.path(getwd(),"wojewodztwa")))
-wojewodztwa <- cbind(wojewodztwa, st_coordinates(st_centroid(wojewodztwa$geometry)))
-
-data_wojewodztwa_agg <- entire_data %>% group_by(Województwo) %>%
-  summarise(oddane_glosy=sum(Liczba.kart.wyjętych.z.urny),
-            uprawnieni_do_glosowania=sum(Liczba.wyborców.uprawnionych.do.głosowania),
-            .groups='drop') %>% as.data.frame()
-
-wojewodztwa_agg <- merge(x=data_wojewodztwa_agg, y=wojewodztwa[c('JPT_NAZWA_', 'geometry','X','Y')], by.x="Województwo", by.y="JPT_NAZWA_")
-wojewodztwa_agg <- transform(wojewodztwa_agg, frekwencja=round(oddane_glosy/uprawnieni_do_glosowania, digits = 3)*100)
-
-############napisy##############
-wojewodztwa_agg <- transform(wojewodztwa_agg, Y_woj=Y-20000)
 
 
 frekwencja_ogolna <- ggplot(data = wojewodztwa_agg, aes(geometry = geometry)) +

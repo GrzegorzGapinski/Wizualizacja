@@ -3,23 +3,24 @@ ui <- fluidPage(
   sidebarLayout(
     sidebarPanel(
       radioButtons("obszar", 
-                   label = "Wybierz mapę:",
-                   choices = c("razem", "wieś", "miasto"),
+                   label = "Wybierz Typ Obszaru:",
+                   choices = c("Razem" ="razem", "Wieś"="wieś", "Miasto"= "miasto"),
                    selected = "razem"),
     selectInput(inputId = 'party',
                 label = "Wybierz Partię",
-                choices = c("Koalicja obywatelska" = "po", 
+                choices = c("Koalicja obywatelska" = "po",
                             "Prawo i Sprawiedliwość" = "pis",
                             "Konfederacja" = "konf",
                             "Lewica Razem" = "lew",
                             "Wiosna" = "wiosna",
                             "Kukiz15" = "kukiz"))
+                # choices = c('pis','po'))
     ),
     mainPanel(
-      tabsetPanel(tabPanel('Table', 
-                           DT::dataTableOutput('table_name'),
-                           plotOutput('frekwencje', height = "600px" )),
-                  tabPanel('plot_one', plotOutput('wykres'))
+      tabsetPanel(tabPanel('Frekwencja w Województwach', 
+                           plotOutput('frekwencje', height = "800px" )),
+                  tabPanel('Popracia dla Partii', plotOutput('wykres', height = "800px")),
+                  tabPanel('Dane dla Województw', DT::dataTableOutput('tabela_wojewodztwa'))
       )
     )
   )
@@ -33,16 +34,17 @@ server <- function(input, output) {
   
   
   output$wykres <- renderPlot({
-      ggplot(data = powiaty_shiny, aes(geometry = geometry, fill = !!input$party)) + 
+      ggplot(data = powiaty_shiny, aes(geometry = geometry, fill = get(input$party))) + 
       geom_sf() +
-      scale_colour_viridis_c(option = "D", alpha = .4) +
+      scale_fill_viridis_c(option = "G", alpha = .6, direction = -1) +
       theme(axis.text.x = element_blank(),
             axis.text.y = element_blank(),
             axis.ticks.x = element_blank(),
             axis.ticks.y = element_blank(),
             axis.title.x = element_blank(),
             axis.title.y = element_blank()
-      )
+      ) +
+      labs(fill = "Poparcie")
   })
   output$frekwencje <- renderPlot({
     entire_data %>%
@@ -66,6 +68,15 @@ server <- function(input, output) {
             axis.ticks.y = element_blank(),
             axis.title.x = element_blank(),
             axis.title.y = element_blank())
+  })
+  output$tabela_wojewodztwa <- DT::renderDataTable({
+    entire_data %>%
+      {if(input$obszar != "razem") filter(., Typ.obszaru == input$obszar) else .} %>% #not sure why this ifelse dont work
+      group_by(Województwo) %>%
+      summarise(oddane_glosy=sum(Liczba.kart.wyjętych.z.urny),
+      uprawnieni_do_glosowania=sum(Liczba.wyborców.uprawnionych.do.głosowania),
+      .groups='drop') %>%
+      as.data.frame() %>% DT::datatable()
   })
   # Wyświetlanie wybranego wykresu
 }
