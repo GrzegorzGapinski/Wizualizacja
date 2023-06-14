@@ -40,6 +40,8 @@ powiaty_shiny <- entire_data %>% group_by(Powiat) %>% summarise(pis=sum(Prawo.i.
 wojewodztwa <- st_as_sf(readOGR(dsn=file.path(getwd(),"wojewodztwa")))
 wojewodztwa <- cbind(wojewodztwa, st_coordinates(st_centroid(wojewodztwa$geometry)))
 
+#wojewodztwa <- transform(wojewodztwa, wojewodztwo_name = sapply(strsplit(x=wojewodztwa$JPT_NAZWA_, split = ' '), function(x) paste(x[-1], collapse = ' ')))  
+
 data_wojewodztwa_agg <- entire_data %>% group_by(Województwo) %>%
   summarise(oddane_glosy=sum(Liczba.kart.wyjętych.z.urny),
             uprawnieni_do_glosowania=sum(Liczba.wyborców.uprawnionych.do.głosowania),
@@ -51,11 +53,33 @@ wojewodztwa_agg <- transform(wojewodztwa_agg, frekwencja=round(oddane_glosy/upra
 
 wojewodztwa_agg <- transform(wojewodztwa_agg, Y_woj=Y-20000)
 
+wojewodztwa_shiny <- entire_data %>%
+  group_by(Województwo) %>%
+  summarise(pis=sum(Prawo.i.Sprawiedliwość)/sum(Liczba.kart.wyjętych.z.urny)*100,
+            po = sum(Koalicja.Europejska)/sum(Liczba.kart.wyjętych.z.urny)*100,
+            konf = sum(Konfederacja)/sum(Liczba.kart.wyjętych.z.urny)*100,
+            wiosna = sum(Wiosna)/sum(Liczba.kart.wyjętych.z.urny)*100,
+            lew = sum(Lewica.Razem)/sum(Liczba.kart.wyjętych.z.urny)*100,
+            kukiz = sum(Kukiz15)/sum(Liczba.kart.wyjętych.z.urny)*100, #in percents
+            .groups='drop') %>% as.data.frame() %>%
+  merge(x=., y=wojewodztwa[c('JPT_NAZWA_', 'geometry')], by.x="Województwo", by.y="JPT_NAZWA_", all.x=TRUE)
+
 ############do tego momentu trzeba załadować, żeby działały wykresy z maps_app.R
 
 
 
 mapa_partia <- ggplot(data = powiaty_shiny, aes(geometry = geometry, fill = po)) + 
+  geom_sf() +
+  scale_fill_viridis_c(option = "G", alpha = .6, direction = -1) +
+  theme(axis.text.x = element_blank(),
+        axis.text.y = element_blank(),
+        axis.ticks.x = element_blank(),
+        axis.ticks.y = element_blank(),
+        axis.title.x = element_blank(),
+        axis.title.y = element_blank()
+  )
+
+mapa_partia <- ggplot(data = wojewodztwa_shiny, aes(geometry = geometry, fill = po)) + 
   geom_sf() +
   scale_fill_viridis_c(option = "G", alpha = .6, direction = -1) +
   theme(axis.text.x = element_blank(),
